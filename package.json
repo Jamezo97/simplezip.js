@@ -5,7 +5,7 @@
   "main": "lib/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc && webpack && uglifyjs --compress --mangle --mangle-props --output build/simplezip.min.js build/simplezip.js"
+    "build": "tsc && browserify lib/index.js --standalone SimpleZip -o build/simplezip.js && uglifyjs --compress --mangle --output build/simplezip.min.js build/simplezip.js"
   },
   "repository": {
     "type": "git",
@@ -23,9 +23,9 @@
   },
   "homepage": "https://github.com/Jamezo97/simplezip.js#readme",
   "devDependencies": {
+    "browserify": "^16.2.2",
     "typescript": "^3.0.3",
-    "uglify-js": "^3.4.9",
-    "webpack": "^4.18.0",
-    "webpack-cli": "^3.1.0"
-  }
+    "uglify-js": "^3.4.9"
+  },
+  "dependencies": {}
 }
