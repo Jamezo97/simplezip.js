@@ -1,6 +1,10 @@
 
-type ZipFile = {name:string,data:ArrayBuffer};
+type ZipFile = {name:string,data:ArrayBuffer|Uint8Array|string};
 type ZipEntry = {name:string,size:number,crc:number,offset:number};
+
+function isNullOrUndefined(obj:any) {
+    return obj === null || obj === undefined;
+}
 
 class SimpleBuffer {
     
@@ -15,10 +19,11 @@ class SimpleBuffer {
     ensureRemaining(size:number) {
         let newCapacity = this.index+size;
         if(newCapacity > this.array.byteLength) {
+            console.log("Reallocate Zip From", this.array.byteLength,"to",newCapacity);
             let newBuf = new Uint8Array(newCapacity);
             newBuf.set(this.array.slice(0, this.index), 0);
-            this.array = newBuf;
             delete this.array;
+            this.array = newBuf;
         }
     }
 
@@ -69,36 +74,87 @@ class SimpleZip {
     private files : Array<ZipEntry> = [];
     private static crcTable : Array<number>|null = null;
 
+    // How much space at the end for the CentralDiRectory is required
+    private cdrAccumulate : number = 0;
+
     constructor(expectedMaxSize:number) {
         this.buf = new SimpleBuffer(expectedMaxSize);
     }
 
+    ensureRemainingSpace(remaining:number) {
+        this.buf.ensureRemaining(remaining);
+    }
+
     appendFile(file:ZipFile) {
-        let data = new Uint8Array(file.data);
-        let zEntry:ZipEntry = {
-            name: file.name,
-            size: data.byteLength,
-            crc: SimpleZip.calcCRC32(data),
-            offset: this.buf.getIndex()
-        };
-        
-        this.buf.ensureRemaining(30+zEntry.name.length+data.byteLength);
+        this.appendFiles([file]);
+    }
 
-        this.buf.writeu32(0x04034b50); //Header sig
-        this.buf.writeu16(0x000a); //Version
-        this.buf.writeu16(0x0000); //Bit Flag
-        this.buf.writeu16(0x0000); //Compression Method(none)
-        this.buf.writeu16(0x94f8); //Last mod Time
-        this.buf.writeu16(0x4d24); //Last mod Date
-        this.buf.writeu32(zEntry.crc); //CRC32
-        this.buf.writeu32(zEntry.size); //Compressed Size
-        this.buf.writeu32(zEntry.size); //Uncompressed Size
-        this.buf.writeu16(zEntry.name.length); //Filename Length
-        this.buf.writeu16(0); //Extra Field Length
-        this.buf.writeStr(zEntry.name); // Name
-        this.buf.append(data); // Uncompressed Data
+    appendFiles(files:Array<ZipFile>) {
+        let zips:Array<{zEntry:ZipEntry,data:Uint8Array}> = [];
+        let headerAccumulate = 0;
 
-        this.files.push(zEntry);
+        // Parse all the files, work out how much space is required to store them
+        for(let file of files) {
+            if(isNullOrUndefined(file) || isNullOrUndefined(file.name) || isNullOrUndefined(file.data)) {
+                throw new Error("Zip file entry missing 'name' or 'data' props");
+            }
+            if(typeof file.name !== 'string' || file.name.length <= 0) {
+                throw new Error("File name must be a string with >0 characters");
+            }
+    
+            let data : Uint8Array;
+            if(typeof file.data === 'string') {
+                data = new Uint8Array(file.data.length);
+                for(let i = 0; i < file.data.length; i++) {
+                    data[i] = file.data.charCodeAt(i);
+                }
+            } else if(file.data instanceof Uint8Array) {
+                data = file.data;
+            } else if(file.data instanceof ArrayBuffer) {
+                data = new Uint8Array(file.data);
+            } else {
+                throw new Error("Unknown typeof data: " + typeof file.data);
+            }
+            
+            let zEntry:ZipEntry = {
+                name: file.name,
+                size: data.byteLength,
+                crc: SimpleZip.calcCRC32(data),
+                offset: -1
+            };
+
+            zips.push({
+                zEntry: zEntry,
+                data: data
+            });
+            headerAccumulate += 30+zEntry.name.length+data.byteLength;
+            this.cdrAccumulate += 46 + file.name.length;
+        }
+        // +22 for EOCD
+        this.buf.ensureRemaining(headerAccumulate + this.cdrAccumulate + 22);
+
+        for(let entry of zips) {
+            let zEntry = entry.zEntry;
+            let data = entry.data;
+            
+            zEntry.offset = this.buf.getIndex();
+
+            this.buf.writeu32(0x04034b50); //Header sig
+            this.buf.writeu16(0x000a); //Version
+            this.buf.writeu16(0x0000); //Bit Flag
+            this.buf.writeu16(0x0000); //Compression Method(none)
+            this.buf.writeu16(0x94f8); //Last mod Time
+            this.buf.writeu16(0x4d24); //Last mod Date
+            this.buf.writeu32(zEntry.crc); //CRC32
+            this.buf.writeu32(zEntry.size); //Compressed Size
+            this.buf.writeu32(zEntry.size); //Uncompressed Size
+            this.buf.writeu16(zEntry.name.length); //Filename Length
+            this.buf.writeu16(0); //Extra Field Length
+            this.buf.writeStr(zEntry.name); // Name
+            this.buf.append(data); // Uncompressed Data
+    
+            this.files.push(zEntry);
+        }
     }
 
     generate() {
@@ -107,7 +163,7 @@ class SimpleZip {
         let requiredRemaining = 22;
 
         for(let file of this.files) {
-            requiredRemaining += 46 + file.name.length
+            requiredRemaining += 46 + file.name.length;
         }
         
         this.buf.ensureRemaining(requiredRemaining);
@@ -155,12 +211,15 @@ class SimpleZip {
         let requiredSize = 22; //EOCD
         for(let file of files) {
             // 1xData, 2xName, 1xCentral Directory File Header and 1xLocal File Header
-            requiredSize += file.data.byteLength + file.name.length*2 + 46 + 30;
+            if(typeof file.data === "string") {
+                requiredSize += file.data.length;
+            } else {
+                requiredSize += file.data.byteLength;
+            }
+            requiredSize += file.name.length*2 + 46 + 30;
         }
         let zip = new SimpleZip(requiredSize);
-        for(let file of files) {
-            zip.appendFile(file);
-        }
+        zip.appendFiles(files);
         return zip.generate();
     }
 
@@ -190,5 +249,4 @@ class SimpleZip {
         }
     }
 }
-
-export {SimpleZip};
+export = SimpleZip;
