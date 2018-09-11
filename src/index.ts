@@ -28,6 +28,11 @@ class SimpleBuffer {
     }
 
     getArrayBuffer() {
+        if(this.array.buffer.byteLength === this.index) {
+            return this.array.buffer;
+        }
+        // Not ideal but necessary. How to slice without copying the data? I don't know... 
+        //      Not without NodeJS buffers
         return this.array.buffer.slice(0, this.index);    
     }
 
