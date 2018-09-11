@@ -1,5 +1,5 @@
 {
-  "name": "simplezip",
+  "name": "simplezip.js",
   "version": "1.0.0",
   "description": "Lightweight uncompressed browser-compatible ZIP generation",
   "main": "lib/index.js",
