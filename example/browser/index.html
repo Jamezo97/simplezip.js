@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+    <head>
+        <script type="text/javascript" src="../../build/simplezip.js"></script>
+    </head>
+    <body>
+        <p><span id="info"></span></p>
+        <p><a id="btn1" href="#">Download Zip A</a></p>
+        <p><a id="btn2" href="#">Download Zip B</a></p>
+        <script type="text/javascript">
+
+            function setupDownload(zipName, buffer, ahrefElement) {
+                var blob = new Blob([buffer], {type: "octet/stream"});
+                var url = window.URL.createObjectURL(blob);
+
+                ahrefElement.href = url;
+                ahrefElement.target = '_blank';
+                ahrefElement.download = zipName;
+            }
+
+
+            var files = [
+                {
+                    name: "FileNumber1.txt",
+                    data: "Hello World"
+                },
+                {
+                    name: "FileNumber2.txt",
+                    data: new Uint8Array([65, 66, 67, 68])
+                }
+            ];
+
+            
+            // Most efficient method, allocated exactly the amount of space required for
+            // the files. Though you must have these files ahead of time
+            var data1 = SimpleZip.GenerateZipFrom(files);
+
+            // Estimate we'll need 100 bytes for the zip file. Add to the zip container
+            // dynamically. If it's too small, it will re-allocate space
+            var otherMethod = new SimpleZip(100);
+                
+            //Actually needs 469 bytes, so it will resize here.
+            otherMethod.appendFiles([files[0], files[1], files[1], files[1]]);
+
+            var data2 = otherMethod.generate();
+
+            document.getElementById("info").innerHTML = "Generated two ZIP files: " + data1.byteLength + "bytes & " + data2.byteLength + "bytes.";
+
+            setupDownload("test-file1.zip", data1, document.getElementById("btn1"));
+            setupDownload("test-file2.zip", data2, document.getElementById("btn2"));
+
+        </script>
+    </body>
+</html>
