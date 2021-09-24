@@ -5,6 +5,9 @@ declare type ZipFile = {
 declare class SimpleZip {
     private buf;
     private files;
+    private createdTime;
+    private createdDate;
+    private ntfsTimeSinceEpoch;
     private static crcTable;
     private cdrAccumulate;
     constructor(expectedMaxSize: number);
