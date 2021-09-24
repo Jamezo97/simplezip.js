@@ -12,4 +12,4 @@ let files = [{
 // This returns an ArrayBuffer
 let data = SimpleZip.GenerateZipFrom(files);
 
-fs.writeFileSync("output.zip", new Buffer(data), {encoding: 'binary'});
+fs.writeFileSync("output.zip", Buffer.from(data), {encoding: 'binary'});
